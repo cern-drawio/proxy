@@ -1,0 +1,112 @@
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: Route
+  metadata:
+    annotations:
+      router.cern.ch/network-visibility: Internet
+    labels:
+      app: nginx-proxy
+    name: nginx-proxy
+  spec:
+    host: drawio-cernbox.web.cern.ch
+    to:
+      kind: Service
+      name: nginx-proxy
+      weight: 100
+    wildcardPolicy: None
+    tls:
+      insecureEdgeTerminationPolicy: Redirect
+      termination: edge
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    annotations:
+      description: Proxy users from https://drawio-cernbox.web.cern.ch to https://drawio.web.cern.ch or https://test-drawio.web.cern.ch
+    labels:
+      app: nginx-proxy
+    name: nginx-proxy
+  spec:
+    replicas: 1
+    selector:
+      app: nginx-proxy
+      deploymentconfig: nginx-proxy
+    strategy:
+      type: Rolling
+    template:
+      metadata:
+        annotations:
+          openshift.io/container.nginx-proxy.image.entrypoint: '["nginx","-g","daemon
+            off;"]'
+          openshift.io/generated-by: OpenShiftNewApp
+        labels:
+          app: nginx-proxy
+          deploymentconfig: nginx-proxy
+      spec:
+        containers:
+        - image: nginx:stable-alpine
+          imagePullPolicy: Always
+          name: nginx-proxy
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          resources:
+            limits:
+              cpu: 100m
+              memory: 20Mi
+            requests:
+              cpu: 50m
+              memory: 10Mi
+          volumeMounts:
+          - mountPath: /etc/nginx/conf.d
+            name: config
+          - mountPath: /var/cache/nginx
+            name: volume-i0d7y
+          - mountPath: /var/run
+            name: volume-9c2mx
+        restartPolicy: Always
+        volumes:
+        - configMap:
+            defaultMode: 420
+            name: nginx-proxy
+          name: config
+        - emptyDir: {}
+          name: volume-i0d7y
+        - emptyDir: {}
+          name: volume-9c2mx
+    triggers:
+    - type: ConfigChange
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: nginx-proxy
+    name: nginx-proxy
+  spec:
+    ports:
+    - name: 8080-tcp
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+    selector:
+      app: nginx-proxy
+      deploymentconfig: nginx-proxy
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  data:
+    app-nginx.conf: |
+      server {
+        listen       8080 default_server;
+        server_name  drawio-cernbox.web.cern.ch;
+
+        location / {
+          proxy_pass https://test-drawio.web.cern.ch;
+        }
+      }
+  kind: ConfigMap
+  metadata:
+    labels:
+      app: drawio
+    name: nginx-proxy
+kind: List
